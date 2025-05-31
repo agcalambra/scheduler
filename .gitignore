@@ -1,0 +1,6 @@
+.DS_Store
+*.txt
+scheduler
+generate_courses
+generate_students
+README.md
