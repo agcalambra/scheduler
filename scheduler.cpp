@@ -522,19 +522,38 @@ public:
     }
 };
 
-int main() {
-    Scheduler scheduler;
-
-    if (!scheduler.loadStudents("students.txt")) {
+int main(int argc, char* argv[]) {
+    if (argc != 3) {
+        cout << "Usage: " << argv[0] << " <students_file> <courses_file>" << endl;
+        cout << "Example: " << argv[0] << " students_case1.txt courses_case1.txt" << endl;
         return 1;
     }
 
-    if (!scheduler.loadCourses("courses.txt")) {
+    string students_file = argv[1];
+    string courses_file = argv[2];
+
+    // Generate output filename based on input
+    string output_file = "schedule_" + students_file.substr(students_file.find_last_of("/\\") + 1);
+    output_file = output_file.substr(0, output_file.find_last_of('.')) + "_results.txt";
+
+    Scheduler scheduler;
+
+    cout << "=== Course Scheduler ===" << endl;
+    cout << "Students file: " << students_file << endl;
+    cout << "Courses file: " << courses_file << endl;
+    cout << "Output file: " << output_file << endl;
+    cout << endl;
+
+    if (!scheduler.loadStudents(students_file)) {
+        return 1;
+    }
+
+    if (!scheduler.loadCourses(courses_file)) {
         return 1;
     }
 
     scheduler.scheduleStudents();
-    scheduler.saveScheduleToFile("schedule.txt");
+    scheduler.saveScheduleToFile(output_file);
     scheduler.printStatistics();
 
     return 0;
