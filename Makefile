@@ -1,22 +1,23 @@
-# Makefile for C++ Course Scheduler System
+# Makefile for C++ Course Scheduler System with Unit Testing
 # No external dependencies required!
 
 CXX = g++
 CXXFLAGS = -std=c++17 -Wall -Wextra -O2
 
 # Target executables
-TARGETS = generate_students generate_courses scheduler scenario_generator
+TARGETS = generate_students generate_courses scheduler scenario_generator unit_tester
 
 # Source files
 STUDENT_GEN_SRC = student_generator.cpp
 COURSE_GEN_SRC = course_generator.cpp
 SCHEDULER_SRC = scheduler.cpp
 SCENARIO_GEN_SRC = scenario_generator.cpp
+UNIT_TESTER_SRC = unit_tester.cpp
 
 # Data files
 DATA_FILES = students.txt courses.txt schedule.txt
 
-.PHONY: all clean run setup install-deps test-scenarios
+.PHONY: all clean run setup test-scenarios grade
 
 all: $(TARGETS)
 
@@ -36,46 +37,50 @@ scheduler: $(SCHEDULER_SRC)
 scenario_generator: $(SCENARIO_GEN_SRC)
 	$(CXX) $(CXXFLAGS) -o $@ $<
 
-# No dependencies to install!
-install-deps:
-	@echo "No external dependencies required!"
-	@echo "This version uses simple text files instead of JSON."
+# Build unit tester
+unit_tester: $(UNIT_TESTER_SRC)
+	$(CXX) $(CXXFLAGS) -o $@ $<
 
-# Setup and run the complete system
-setup: all
-
-# Run the complete scheduling process
-run: all
-	@echo "=== Generating Students ==="
-	./generate_students
-	@echo ""
-	@echo "=== Generating Courses ==="
-	./generate_courses
-	@echo ""
-	@echo "=== Running Scheduler ==="
-	./scheduler students.txt courses.txt
-	@echo ""
-	@echo "=== Process Complete ==="
-	@echo "Check schedule_students_results.txt for results"
-
-# Generate and test all 4 scenarios
-test-scenarios: scenario_generator
+# Generate and test all 4 scenarios with unit tests
+test-scenarios: scenario_generator scheduler unit_tester
 	@echo "=== Generating All Test Scenarios ==="
 	./scenario_generator
 	@echo ""
 	@echo "=== Testing Case 1 (Easy) ==="
 	./scheduler students_case1.txt courses_case1.txt
+	./unit_tester students_case1.txt courses_case1.txt schedule_students_case1_results.txt
 	@echo ""
 	@echo "=== Testing Case 2 (Medium) ==="
 	./scheduler students_case2.txt courses_case2.txt
+	./unit_tester students_case2.txt courses_case2.txt schedule_students_case2_results.txt
 	@echo ""
 	@echo "=== Testing Case 3 (Difficult) ==="
 	./scheduler students_case3.txt courses_case3.txt
+	./unit_tester students_case3.txt courses_case3.txt schedule_students_case3_results.txt
 	@echo ""
 	@echo "=== Testing Case 4 (Stretch Goal) ==="
 	./scheduler students_case4.txt courses_case4.txt
+	./unit_tester students_case4.txt courses_case4.txt schedule_students_case4_results.txt
 	@echo ""
 	@echo "=== All Scenarios Complete ==="
+	@echo "Check test_report_students_case*.txt for detailed results"
+
+# Grade a specific case
+grade-case1: scheduler unit_tester
+	./scheduler students_case1.txt courses_case1.txt
+	./unit_tester students_case1.txt courses_case1.txt schedule_students_case1_results.txt
+
+grade-case2: scheduler unit_tester
+	./scheduler students_case2.txt courses_case2.txt
+	./unit_tester students_case2.txt courses_case2.txt schedule_students_case2_results.txt
+
+grade-case3: scheduler unit_tester
+	./scheduler students_case3.txt courses_case3.txt
+	./unit_tester students_case3.txt courses_case3.txt schedule_students_case3_results.txt
+
+grade-case4: scheduler unit_tester
+	./scheduler students_case4.txt courses_case4.txt
+	./unit_tester students_case4.txt courses_case4.txt schedule_students_case4_results.txt
 
 # Clean build artifacts
 clean:
@@ -85,31 +90,22 @@ clean:
 # Clean all generated files
 clean-all: clean
 	rm -f $(DATA_FILES)
-
-# Quick test run (generates data and schedules)
-test: run
-	@echo "=== Testing Results ==="
-	@if [ -f schedule_students_results.txt ]; then \
-		echo "✓ Schedule generated successfully"; \
-		echo "File size: $$(wc -c < schedule_students_results.txt) bytes"; \
-		echo "Number of students processed: $$(grep -c '^[0-9]' schedule_students_results.txt)"; \
-	else \
-		echo "✗ Schedule generation failed"; \
-	fi
+	rm -f students_case*.txt courses_case*.txt schedule_*.txt test_report_*.txt
 
 # Help target
 help:
 	@echo "Available targets:"
-	@echo "  all           - Build all executables"
-	@echo "  setup         - Install dependencies and build"
-	@echo "  run           - Generate data and run scheduler"
-	@echo "  test          - Run system and verify output"
-	@echo "  test-scenarios- Generate and test all 4 difficulty cases"
-	@echo "  clean         - Remove executables"
-	@echo "  clean-all     - Remove executables and data files"
-	@echo "  install-deps  - No dependencies needed!"
-	@echo "  help          - Show this help message"
+	@echo "  all              - Build all executables"
+	@echo "  test-scenarios   - Generate and test all 4 difficulty cases"
+	@echo "  grade-case1      - Test only Case 1 (Easy)"
+	@echo "  grade-case2      - Test only Case 2 (Medium)"
+	@echo "  grade-case3      - Test only Case 3 (Difficult)"
+	@echo "  grade-case4      - Test only Case 4 (Stretch Goal)"
+	@echo "  clean            - Remove executables"
+	@echo "  clean-all        - Remove executables and all generated files"
+	@echo "  help             - Show this help message"
 	@echo ""
-	@echo "Quick start:"
-	@echo "  make all              # Build everything"
-	@echo "  make test-scenarios   # Test all 4 cases"
+	@echo "Quick start for grading:"
+	@echo "  make all                # Build everything"
+	@echo "  make test-scenarios     # Generate and test all cases"
+	@echo "  make grade-case1        # Test only easy case"
