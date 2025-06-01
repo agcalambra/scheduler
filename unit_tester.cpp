@@ -7,17 +7,18 @@
 #include <sstream>
 #include <algorithm>
 #include <stdexcept>
-#include <memory>
 
 using namespace std;
 
-// Safe wrapper for all operations
-class SafeUnitTester {
+// Simple and safe unit tester
+class SimpleUnitTester {
 private:
     struct TestResult {
         string test_name;
         bool passed;
         string error_message;
+        string detailed_feedback;
+        string suggested_fixes;
         int points_possible;
         int points_earned;
     };
@@ -31,14 +32,10 @@ private:
         TimeSlot() : duration_hours(0) {}
 
         string toString() const {
-            try {
-                if (day.empty() || start_time.empty() || end_time.empty()) {
-                    return "";
-                }
-                return day + "_" + start_time + "-" + end_time;
-            } catch (...) {
+            if (day.empty() || start_time.empty() || end_time.empty()) {
                 return "";
             }
+            return day + "_" + start_time + "-" + end_time;
         }
     };
 
@@ -78,625 +75,534 @@ private:
     vector<Student> students;
     vector<Course> courses;
     vector<ScheduleResult> results;
-    unordered_map<string, int> course_index_map; // Use indices instead of pointers
+    unordered_map<string, int> course_index_map;
     vector<TestResult> test_results;
 
-    bool data_loaded_successfully = false;
-    bool results_loaded_successfully = false;
+    bool data_loaded = false;
+    bool results_loaded = false;
 
 public:
-    SafeUnitTester() {
-        try {
-            students.reserve(1000);
-            courses.reserve(100);
-            results.reserve(1000);
-            test_results.reserve(20);
-        } catch (...) {
-            cout << "Warning: Could not reserve memory" << endl;
-        }
-    }
-
-    // Safe string operations
     vector<string> safeSplit(const string& str, char delimiter) {
         vector<string> tokens;
-        try {
-            if (str.empty() || str.length() > 10000) {
-                return tokens;
-            }
+        if (str.empty() || str.length() > 5000) return tokens;
 
-            tokens.reserve(50); // Reasonable limit
-            stringstream ss(str);
-            string token;
-            int count = 0;
+        stringstream ss(str);
+        string token;
+        int count = 0;
 
-            while (getline(ss, token, delimiter) && count < 100) {
-                if (!token.empty() && token.length() < 1000) {
-                    tokens.push_back(token);
-                }
-                count++;
+        while (getline(ss, token, delimiter) && count < 100) {
+            if (!token.empty() && token.length() < 500) {
+                tokens.push_back(token);
             }
-        } catch (...) {
-            tokens.clear();
+            count++;
         }
         return tokens;
     }
 
     int safeStringToInt(const string& str, int default_value = 0) {
+        if (str.empty() || str.length() > 10) return default_value;
         try {
-            if (str.empty() || str.length() > 10) {
-                return default_value;
-            }
             return stoi(str);
         } catch (...) {
             return default_value;
         }
     }
 
-    TimeSlot parseTimeSlotSafely(const string& slot_str) {
+    TimeSlot parseTimeSlot(const string& slot_str) {
         TimeSlot slot;
-        try {
-            if (slot_str.empty() || slot_str.length() > 100) {
-                return slot;
-            }
+        if (slot_str.empty() || slot_str.length() > 50) return slot;
 
+        try {
             size_t colon_pos = slot_str.find(':');
-            if (colon_pos == string::npos || colon_pos >= slot_str.length() - 1) {
-                return slot;
-            }
+            if (colon_pos == string::npos) return slot;
 
             string time_part = slot_str.substr(0, colon_pos);
             string duration_str = slot_str.substr(colon_pos + 1);
-
             slot.duration_hours = safeStringToInt(duration_str, 1);
 
             size_t underscore_pos = time_part.find('_');
-            if (underscore_pos == string::npos || underscore_pos >= time_part.length() - 1) {
-                return slot;
-            }
+            if (underscore_pos == string::npos) return slot;
 
             slot.day = time_part.substr(0, underscore_pos);
-            if (slot.day.length() > 20) {
-                slot.day = "";
-                return slot;
-            }
-
             string time_range = time_part.substr(underscore_pos + 1);
+
             size_t dash_pos = time_range.find('-');
-            if (dash_pos == string::npos || dash_pos >= time_range.length() - 1) {
-                return slot;
-            }
+            if (dash_pos == string::npos) return slot;
 
             slot.start_time = time_range.substr(0, dash_pos);
             slot.end_time = time_range.substr(dash_pos + 1);
 
-            if (slot.start_time.length() > 10 || slot.end_time.length() > 10) {
-                slot = TimeSlot(); // Reset to empty
-            }
-
         } catch (...) {
-            slot = TimeSlot(); // Reset to empty on any error
+            // Return empty slot on any error
         }
         return slot;
     }
 
-    bool timeSlotsOverlapSafely(const TimeSlot& slot1, const TimeSlot& slot2) {
-        try {
-            if (slot1.day.empty() || slot2.day.empty() || slot1.day != slot2.day) {
-                return false;
-            }
+    bool loadData(const string& students_file, const string& courses_file) {
+        cout << "Loading input data..." << endl;
 
-            if (slot1.start_time.empty() || slot1.end_time.empty() ||
-                slot2.start_time.empty() || slot2.end_time.empty()) {
-                return false;
-            }
-
-            auto timeToMinutes = [this](const string& time) -> int {
-                try {
-                    if (time.length() < 5) return 0;
-                    int hours = safeStringToInt(time.substr(0, 2), 0);
-                    int minutes = safeStringToInt(time.substr(3, 2), 0);
-                    if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) {
-                        return 0;
-                    }
-                    return hours * 60 + minutes;
-                } catch (...) {
-                    return 0;
-                }
-            };
-
-            int start1 = timeToMinutes(slot1.start_time);
-            int end1 = timeToMinutes(slot1.end_time);
-            int start2 = timeToMinutes(slot2.start_time);
-            int end2 = timeToMinutes(slot2.end_time);
-
-            if (start1 >= end1 || start2 >= end2) return false; // Invalid times
-
-            return !(end1 <= start2 || end2 <= start1);
-
-        } catch (...) {
+        // Load students
+        ifstream sfile(students_file);
+        if (!sfile.is_open()) {
+            cout << "Error: Cannot open " << students_file << endl;
             return false;
         }
-    }
 
-    bool loadInputDataSafely(const string& students_file, const string& courses_file) {
-        cout << "Loading input data safely..." << endl;
-        data_loaded_successfully = false;
+        string line;
+        int student_count = 0;
+        while (getline(sfile, line) && student_count < 1000) {
+            if (line.empty() || line[0] == '#') continue;
 
-        try {
-            // Load students with extensive error checking
-            ifstream sfile(students_file);
-            if (!sfile.is_open()) {
-                cout << "Error: Cannot open students file: " << students_file << endl;
-                return false;
-            }
+            vector<string> parts = safeSplit(line, '|');
+            if (parts.size() != 6) continue;
 
-            string line;
-            int student_count = 0;
-            int line_number = 0;
+            try {
+                Student student;
+                student.id = safeStringToInt(parts[0]);
+                if (student.id <= 0) continue;
 
-            while (getline(sfile, line) && student_count < 5000) {
-                line_number++;
+                student.name = parts[1];
+                student.min_units = safeStringToInt(parts[2]);
+                student.max_units = safeStringToInt(parts[3]);
 
-                try {
-                    if (line.empty() || line[0] == '#' || line.length() > 5000) continue;
+                if (student.min_units < 0 || student.max_units < 0 ||
+                    student.min_units > student.max_units) continue;
 
-                    vector<string> parts = safeSplit(line, '|');
-                    if (parts.size() != 6) {
-                        if (line_number % 100 == 0) {
-                            cout << "Warning: Skipping malformed student line " << line_number << endl;
-                        }
-                        continue;
-                    }
-
-                    Student student;
-                    student.id = safeStringToInt(parts[0], -1);
-                    if (student.id <= 0 || student.id > 100000) {
-                        continue;
-                    }
-
-                    student.name = parts[1];
-                    if (student.name.length() > 100) {
-                        student.name = student.name.substr(0, 100);
-                    }
-
-                    student.min_units = safeStringToInt(parts[2], 0);
-                    student.max_units = safeStringToInt(parts[3], 0);
-
-                    if (student.min_units < 0 || student.max_units < 0 ||
-                        student.min_units > student.max_units || student.max_units > 50) {
-                        continue;
-                    }
-
-                    if (!parts[4].empty() && parts[4].length() < 1000) {
-                        student.preferred_courses = safeSplit(parts[4], ',');
-                        if (student.preferred_courses.size() > 20) {
-                            student.preferred_courses.resize(20);
-                        }
-                    }
-
-                    if (!parts[5].empty() && parts[5].length() < 1000) {
-                        student.unavailable_times = safeSplit(parts[5], ',');
-                        if (student.unavailable_times.size() > 20) {
-                            student.unavailable_times.resize(20);
-                        }
-                    }
-
-                    students.push_back(student);
-                    student_count++;
-
-                } catch (...) {
-                    if (line_number % 100 == 0) {
-                        cout << "Warning: Exception parsing student line " << line_number << endl;
-                    }
-                    continue;
+                if (!parts[4].empty()) {
+                    student.preferred_courses = safeSplit(parts[4], ',');
                 }
-            }
-            sfile.close();
-
-            // Load courses with extensive error checking
-            ifstream cfile(courses_file);
-            if (!cfile.is_open()) {
-                cout << "Error: Cannot open courses file: " << courses_file << endl;
-                return false;
-            }
-
-            int course_count = 0;
-            line_number = 0;
-
-            while (getline(cfile, line) && course_count < 1000) {
-                line_number++;
-
-                try {
-                    if (line.empty() || line[0] == '#' || line.length() > 5000) continue;
-
-                    vector<string> parts = safeSplit(line, '|');
-                    if (parts.size() != 7) {
-                        if (line_number % 50 == 0) {
-                            cout << "Warning: Skipping malformed course line " << line_number << endl;
-                        }
-                        continue;
-                    }
-
-                    Course course;
-                    course.id = parts[0];
-                    if (course.id.empty() || course.id.length() > 50) {
-                        continue;
-                    }
-
-                    course.name = parts[1];
-                    if (course.name.length() > 100) {
-                        course.name = course.name.substr(0, 100);
-                    }
-
-                    course.units = safeStringToInt(parts[2], 0);
-                    course.max_students = safeStringToInt(parts[3], 0);
-
-                    if (course.units <= 0 || course.units > 10 ||
-                        course.max_students <= 0 || course.max_students > 1000) {
-                        continue;
-                    }
-
-                    course.instructor = parts[4];
-                    course.room = parts[5];
-
-                    if (!parts[6].empty() && parts[6].length() < 2000) {
-                        vector<string> slot_strings = safeSplit(parts[6], ',');
-                        if (slot_strings.size() > 10) {
-                            cout << "Warning: Course " << course.id << " has too many time slots, truncating" << endl;
-                            slot_strings.resize(10);
-                        }
-
-                        for (const auto& slot_str : slot_strings) {
-                            if (!slot_str.empty() && slot_str.length() < 100) {
-                                TimeSlot slot = parseTimeSlotSafely(slot_str);
-                                if (!slot.day.empty()) {
-                                    course.time_slots.push_back(slot);
-                                }
-                            }
-                        }
-                    }
-
-                    courses.push_back(course);
-                    course_index_map[course.id] = course_count;
-                    course_count++;
-
-                } catch (...) {
-                    if (line_number % 50 == 0) {
-                        cout << "Warning: Exception parsing course line " << line_number << endl;
-                    }
-                    continue;
+                if (!parts[5].empty()) {
+                    student.unavailable_times = safeSplit(parts[5], ',');
                 }
+
+                students.push_back(student);
+                student_count++;
+            } catch (...) {
+                continue;
             }
-            cfile.close();
+        }
+        sfile.close();
 
-            cout << "Loaded " << students.size() << " students and " << courses.size() << " courses" << endl;
-
-            if (students.empty() || courses.empty()) {
-                cout << "Error: No valid students or courses loaded" << endl;
-                return false;
-            }
-
-            data_loaded_successfully = true;
-            return true;
-
-        } catch (const exception& e) {
-            cout << "Exception loading input data: " << e.what() << endl;
-            return false;
-        } catch (...) {
-            cout << "Unknown exception loading input data" << endl;
+        // Load courses
+        ifstream cfile(courses_file);
+        if (!cfile.is_open()) {
+            cout << "Error: Cannot open " << courses_file << endl;
             return false;
         }
-    }
 
-    bool loadScheduleResultsSafely(const string& results_file) {
-        cout << "Loading schedule results safely..." << endl;
-        results_loaded_successfully = false;
+        int course_count = 0;
+        while (getline(cfile, line) && course_count < 100) {
+            if (line.empty() || line[0] == '#') continue;
 
-        try {
-            ifstream file(results_file);
-            if (!file.is_open()) {
-                cout << "Error: Cannot open results file: " << results_file << endl;
-                return false;
-            }
+            vector<string> parts = safeSplit(line, '|');
+            if (parts.size() != 7) continue;
 
-            string line;
-            bool in_student_section = false;
-            int result_count = 0;
-            int line_number = 0;
+            try {
+                Course course;
+                course.id = parts[0];
+                if (course.id.empty()) continue;
 
-            while (getline(file, line) && result_count < 5000) {
-                line_number++;
+                course.name = parts[1];
+                course.units = safeStringToInt(parts[2]);
+                course.max_students = safeStringToInt(parts[3]);
 
-                try {
-                    if (line.find("STUDENT SCHEDULES") != string::npos) {
-                        in_student_section = true;
-                        continue;
-                    }
-                    if (line.find("COURSE ENROLLMENTS") != string::npos) {
-                        in_student_section = false;
-                        break;
-                    }
+                if (course.units <= 0 || course.max_students <= 0) continue;
 
-                    if (in_student_section && !line.empty() && line[0] != '#' &&
-                        line.find("Format:") == string::npos && line.length() < 5000) {
+                course.instructor = parts[4];
+                course.room = parts[5];
 
-                        vector<string> parts = safeSplit(line, '|');
-                        if (parts.size() >= 4) {
-                            ScheduleResult result;
-                            result.student_id = safeStringToInt(parts[0], -1);
-                            if (result.student_id <= 0 || result.student_id > 100000) {
-                                continue;
+                if (!parts[6].empty()) {
+                    vector<string> slot_strings = safeSplit(parts[6], ',');
+                    for (const auto& slot_str : slot_strings) {
+                        if (!slot_str.empty()) {
+                            TimeSlot slot = parseTimeSlot(slot_str);
+                            if (!slot.day.empty()) {
+                                course.time_slots.push_back(slot);
                             }
-
-                            result.student_name = parts[1];
-                            if (result.student_name.length() > 100) {
-                                result.student_name = result.student_name.substr(0, 100);
-                            }
-
-                            result.total_units = safeStringToInt(parts[2], 0);
-                            if (result.total_units < 0 || result.total_units > 50) {
-                                continue;
-                            }
-
-                            result.success = (parts[3] == "YES");
-
-                            if (parts.size() > 4 && !parts[4].empty() && parts[4].length() < 1000) {
-                                result.assigned_courses = safeSplit(parts[4], ',');
-                                if (result.assigned_courses.size() > 20) {
-                                    result.assigned_courses.resize(20);
-                                }
-                            }
-
-                            results.push_back(result);
-                            result_count++;
                         }
                     }
-                } catch (...) {
-                    if (line_number % 100 == 0) {
-                        cout << "Warning: Exception parsing result line " << line_number << endl;
+                }
+
+                courses.push_back(course);
+                course_index_map[course.id] = course_count;
+                course_count++;
+            } catch (...) {
+                continue;
+            }
+        }
+        cfile.close();
+
+        cout << "Loaded " << students.size() << " students and " << courses.size() << " courses" << endl;
+        data_loaded = (students.size() > 0 && courses.size() > 0);
+        return data_loaded;
+    }
+
+    bool loadResults(const string& results_file) {
+        cout << "Loading results..." << endl;
+
+        ifstream file(results_file);
+        if (!file.is_open()) {
+            cout << "Error: Cannot open " << results_file << endl;
+            return false;
+        }
+
+        string line;
+        bool in_student_section = false;
+        int result_count = 0;
+
+        while (getline(file, line) && result_count < 1000) {
+            if (line.find("STUDENT SCHEDULES") != string::npos) {
+                in_student_section = true;
+                continue;
+            }
+            if (line.find("COURSE ENROLLMENTS") != string::npos) {
+                break;
+            }
+
+            if (in_student_section && !line.empty() && line[0] != '#' &&
+                line.find("Format:") == string::npos) {
+
+                vector<string> parts = safeSplit(line, '|');
+                if (parts.size() >= 4) {
+                    try {
+                        ScheduleResult result;
+                        result.student_id = safeStringToInt(parts[0]);
+                        if (result.student_id <= 0) continue;
+
+                        result.student_name = parts[1];
+                        result.total_units = safeStringToInt(parts[2]);
+                        result.success = (parts[3] == "YES");
+
+                        if (parts.size() > 4 && !parts[4].empty()) {
+                            result.assigned_courses = safeSplit(parts[4], ',');
+                        }
+
+                        results.push_back(result);
+                        result_count++;
+                    } catch (...) {
+                        continue;
                     }
-                    continue;
                 }
             }
-            file.close();
-
-            cout << "Loaded " << results.size() << " schedule results" << endl;
-
-            if (results.empty()) {
-                cout << "Error: No valid schedule results loaded" << endl;
-                return false;
-            }
-
-            results_loaded_successfully = true;
-            return true;
-
-        } catch (const exception& e) {
-            cout << "Exception loading results: " << e.what() << endl;
-            return false;
-        } catch (...) {
-            cout << "Unknown exception loading results" << endl;
-            return false;
         }
+        file.close();
+
+        cout << "Loaded " << results.size() << " results" << endl;
+        results_loaded = (results.size() > 0);
+        return results_loaded;
     }
 
-    void addTestSafely(const string& name, bool passed, const string& error, int points) {
-        try {
-            TestResult result;
-            result.test_name = name;
-            result.passed = passed;
-            result.error_message = error;
-            result.points_possible = points;
-            result.points_earned = passed ? points : 0;
-            test_results.push_back(result);
-        } catch (...) {
-            cout << "Warning: Could not add test result for " << name << endl;
+    void addTest(const string& name, bool passed, const string& error,
+                const string& feedback, const string& fixes, int points) {
+        TestResult result;
+        result.test_name = name;
+        result.passed = passed;
+        result.error_message = error;
+        result.detailed_feedback = feedback;
+        result.suggested_fixes = fixes;
+        result.points_possible = points;
+        result.points_earned = passed ? points : 0;
+        test_results.push_back(result);
+
+        // Immediate feedback
+        cout << "\n" << string(50, '=') << endl;
+        cout << "TEST: " << name << endl;
+        cout << "RESULT: " << (passed ? "✓ PASSED" : "✗ FAILED") << endl;
+        cout << "POINTS: " << result.points_earned << "/" << points << endl;
+
+        if (!passed) {
+            cout << "\nERROR: " << error << endl;
+            if (!feedback.empty()) {
+                cout << "ANALYSIS: " << feedback << endl;
+            }
+            if (!fixes.empty()) {
+                cout << "FIXES: " << fixes << endl;
+            }
         }
+        cout << string(50, '=') << endl;
     }
 
-    Course* getCourseByIdSafely(const string& course_id) {
-        try {
-            if (course_id.empty() || course_id.length() > 50) {
-                return nullptr;
-            }
-
-            auto it = course_index_map.find(course_id);
-            if (it != course_index_map.end() && it->second >= 0 &&
-                it->second < (int)courses.size()) {
-                return &courses[it->second];
-            }
-        } catch (...) {
-            // Return null on any error
+    Course* getCourse(const string& course_id) {
+        auto it = course_index_map.find(course_id);
+        if (it != course_index_map.end() && it->second < (int)courses.size()) {
+            return &courses[it->second];
         }
         return nullptr;
     }
 
-    void runSafeTests() {
-        cout << "\n=== RUNNING SAFE UNIT TESTS ===" << endl;
+    void runAllTests() {
+        cout << "\n" << string(60, '=') << endl;
+        cout << "RUNNING UNIT TESTS" << endl;
+        cout << string(60, '=') << endl;
 
-        // Pre-flight checks
-        if (!data_loaded_successfully) {
-            addTestSafely("Data Loading", false, "Input data failed to load", 0);
+        if (!data_loaded) {
+            addTest("Data Loading", false, "Could not load input files",
+                   "Input files are missing or corrupted",
+                   "1. Check if files exist\n2. Run scenario generator first", 0);
             return;
         }
 
-        if (!results_loaded_successfully) {
-            addTestSafely("Results Loading", false, "Schedule results failed to load", 0);
+        if (!results_loaded) {
+            addTest("Results Loading", false, "Could not load results file",
+                   "Scheduler didn't generate proper output",
+                   "1. Run scheduler manually\n2. Check for crashes", 0);
             return;
         }
 
-        addTestSafely("Data Loading", true, "", 0);
-        addTestSafely("Results Loading", true, "", 0);
-
-        // Run tests with full exception handling
-        runCase1TestsSafely();
-        runCase2TestsSafely();
-        runCase3TestsSafely();
-        runCase4TestsSafely();
+        runBasicTests();
     }
 
-    void runCase1TestsSafely() {
-        cout << "\nCase 1: Basic Requirements" << endl;
+    void runBasicTests() {
+        cout << "\nRunning Case 1: Basic Requirements" << endl;
 
+        // Test 1.1: Basic Scheduling
         try {
-            // Test 1.1: Basic scheduling
             bool found_successful = false;
-            for (size_t i = 0; i < results.size() && i < 1000; i++) {
-                if (results[i].success) {
-                    found_successful = true;
-                    break;
-                }
-            }
-            addTestSafely("1.1: Basic Scheduling", found_successful,
-                         "No students were successfully scheduled", 1);
-        } catch (...) {
-            addTestSafely("1.1: Basic Scheduling", false, "Exception during test", 1);
-        }
+            int total = 0, successful = 0;
 
-        try {
-            // Test 1.2: Minimum units
-            bool all_meet_min = true;
-            string error_msg = "";
-
-            for (size_t i = 0; i < results.size() && i < 1000; i++) {
-                const auto& result = results[i];
+            for (const auto& result : results) {
+                total++;
                 if (result.success) {
-                    for (size_t j = 0; j < students.size() && j < 1000; j++) {
-                        if (students[j].id == result.student_id) {
-                            if (result.total_units < students[j].min_units) {
-                                all_meet_min = false;
-                                error_msg = "Student " + to_string(students[j].id) + " insufficient units";
-                                break;
-                            }
-                        }
-                    }
-                    if (!all_meet_min) break;
+                    successful++;
+                    found_successful = true;
                 }
             }
 
-            addTestSafely("1.2: Minimum Unit Requirements", all_meet_min, error_msg, 1);
+            string error_msg = "";
+            string feedback = "";
+            string fixes = "";
+
+            if (!found_successful) {
+                error_msg = "No students were successfully scheduled";
+                if (total == 0) {
+                    feedback = "No student data found in results";
+                    fixes = "1. Check scheduler output format\n2. Verify file generation";
+                } else {
+                    feedback = "Found " + to_string(total) + " students but none successful";
+                    fixes = "1. Check constraint logic\n2. Verify success flag setting\n3. Debug scheduling algorithm";
+                }
+            } else {
+                feedback = to_string(successful) + "/" + to_string(total) + " students successful";
+            }
+
+            addTest("1.1: Basic Scheduling", found_successful, error_msg, feedback, fixes, 1);
+
         } catch (...) {
-            addTestSafely("1.2: Minimum Unit Requirements", false, "Exception during test", 1);
+            addTest("1.1: Basic Scheduling", false, "Test crashed",
+                   "Exception during basic scheduling test",
+                   "1. Check for memory issues\n2. Validate data structures", 1);
         }
 
-        // Continue with other Case 1 tests...
-        runRemainingCase1Tests();
-    }
-
-    void runCase2TestsSafely() {
-        cout << "\nCase 2: Conflict Resolution" << endl;
-
+        // Test 1.2: Minimum Units
         try {
-            // Test 2.1: No time conflicts - ultra-safe version
-            bool no_conflicts = true;
-            string error_msg = "";
+            bool all_meet_min = true;
+            int violations = 0;
 
-            for (size_t i = 0; i < results.size() && i < 500; i++) {
-                const auto& result = results[i];
-
-                if (result.assigned_courses.size() > 50) {
-                    cout << "Warning: Student " << result.student_id << " has too many courses, skipping" << endl;
-                    continue;
-                }
-
-                vector<TimeSlot> all_slots;
-                all_slots.reserve(result.assigned_courses.size() * 5);
-
-                for (size_t j = 0; j < result.assigned_courses.size() && j < 20; j++) {
-                    const string& course_id = result.assigned_courses[j];
-                    Course* course = getCourseByIdSafely(course_id);
-
-                    if (course && course->time_slots.size() < 20) {
-                        for (const auto& slot : course->time_slots) {
-                            if (!slot.day.empty() && all_slots.size() < 100) {
-                                all_slots.push_back(slot);
+            for (const auto& result : results) {
+                if (result.success) {
+                    for (const auto& student : students) {
+                        if (student.id == result.student_id) {
+                            if (result.total_units < student.min_units) {
+                                violations++;
+                                all_meet_min = false;
                             }
-                        }
-                    }
-                }
-
-                // Check overlaps with bounds checking
-                for (size_t j = 0; j < all_slots.size() && j < 50; j++) {
-                    for (size_t k = j + 1; k < all_slots.size() && k < 50; k++) {
-                        if (timeSlotsOverlapSafely(all_slots[j], all_slots[k])) {
-                            no_conflicts = false;
-                            error_msg = "Student " + to_string(result.student_id) + " has time conflicts";
                             break;
                         }
                     }
-                    if (!no_conflicts) break;
                 }
-                if (!no_conflicts) break;
             }
 
-            addTestSafely("2.1: No Time Conflicts", no_conflicts, error_msg, 2);
+            string error_msg = violations > 0 ? to_string(violations) + " students below minimum units" : "";
+            string feedback = violations > 0 ?
+                "Students marked successful don't meet unit requirements" :
+                "All successful students meet minimum units";
+            string fixes = violations > 0 ?
+                "1. Check: total_units >= min_units before success\n2. Validate unit counting" : "";
+
+            addTest("1.2: Minimum Units", all_meet_min, error_msg, feedback, fixes, 1);
 
         } catch (...) {
-            addTestSafely("2.1: No Time Conflicts", false, "Exception during conflict checking", 2);
+            addTest("1.2: Minimum Units", false, "Test crashed",
+                   "Exception during minimum unit test",
+                   "1. Check data access\n2. Validate student matching", 1);
         }
 
-        // Add remaining Case 2 tests with similar safety...
-        runRemainingCase2Tests();
-    }
-
-    void runCase3TestsSafely() {
-        cout << "\nCase 3: Resource Competition" << endl;
-        addTestSafely("3.1: Course Capacity", true, "Placeholder", 3);
-        addTestSafely("3.2: Competition Handling", true, "Placeholder", 3);
-        addTestSafely("3.3: Resource Usage", true, "Placeholder", 3);
-    }
-
-    void runCase4TestsSafely() {
-        cout << "\nCase 4: Advanced Features" << endl;
-        addTestSafely("4.1: Complex Time Handling", true, "Placeholder", 4);
-        addTestSafely("4.2: Advanced Optimization", true, "Placeholder", 4);
-    }
-
-    void runRemainingCase1Tests() {
-        // Implement remaining Case 1 tests with same safety pattern...
-        addTestSafely("1.3: Maximum Unit Limits", true, "Placeholder", 1);
-        addTestSafely("1.4: Minimum 3-Unit Courses", true, "Placeholder", 1);
-        addTestSafely("1.5: Maximum 1-Unit Courses", true, "Placeholder", 1);
-    }
-
-    void runRemainingCase2Tests() {
-        // Implement remaining Case 2 tests with same safety pattern...
-        addTestSafely("2.2: Unavailable Times", true, "Placeholder", 2);
-        addTestSafely("2.3: No Duplicates", true, "Placeholder", 2);
-        addTestSafely("2.4: Preferences", true, "Placeholder", 2);
-    }
-
-    void printResultsSafely() {
+        // Test 1.3: Maximum Units
         try {
-            cout << "\n=== SAFE TEST RESULTS ===" << endl;
+            bool all_under_max = true;
+            int violations = 0;
 
-            int total_points = 0;
-            int earned_points = 0;
-
-            for (const auto& test : test_results) {
-                cout << (test.passed ? "✓" : "✗") << " " << test.test_name;
-                if (test.points_possible > 0) {
-                    cout << " (" << test.points_earned << "/" << test.points_possible << " points)";
+            for (const auto& result : results) {
+                for (const auto& student : students) {
+                    if (student.id == result.student_id) {
+                        if (result.total_units > student.max_units) {
+                            violations++;
+                            all_under_max = false;
+                        }
+                        break;
+                    }
                 }
-
-                if (!test.passed && !test.error_message.empty()) {
-                    cout << " - " << test.error_message;
-                }
-                cout << endl;
-
-                total_points += test.points_possible;
-                earned_points += test.points_earned;
             }
 
-            cout << "\n=== FINAL SCORE ===" << endl;
-            cout << "Total: " << earned_points << "/" << total_points << " points";
-            if (total_points > 0) {
-                cout << " (" << (100.0 * earned_points / total_points) << "%)";
+            string error_msg = violations > 0 ? to_string(violations) + " students exceed maximum units" : "";
+            string feedback = violations > 0 ?
+                "Students have more units than allowed" :
+                "All students within maximum unit limits";
+            string fixes = violations > 0 ?
+                "1. Check: total_units <= max_units\n2. Stop enrolling at max" : "";
+
+            addTest("1.3: Maximum Units", all_under_max, error_msg, feedback, fixes, 1);
+
+        } catch (...) {
+            addTest("1.3: Maximum Units", false, "Test crashed",
+                   "Exception during maximum unit test",
+                   "1. Check bounds\n2. Validate data", 1);
+        }
+
+        // Test 1.4: Minimum 3-Unit Courses
+        try {
+            bool all_meet_requirement = true;
+            int violations = 0;
+
+            for (const auto& result : results) {
+                if (result.success) {
+                    int three_unit_count = 0;
+                    for (const auto& course_id : result.assigned_courses) {
+                        Course* course = getCourse(course_id);
+                        if (course && course->units == 3) {
+                            three_unit_count++;
+                        }
+                    }
+
+                    if (three_unit_count < 3) {
+                        violations++;
+                        all_meet_requirement = false;
+                    }
+                }
+            }
+
+            string error_msg = violations > 0 ? to_string(violations) + " students lack 3-unit courses" : "";
+            string feedback = violations > 0 ?
+                "Successful students need at least 3 three-unit courses" :
+                "All successful students have enough 3-unit courses";
+            string fixes = violations > 0 ?
+                "1. Count 3-unit courses before marking success\n2. Prioritize 3-unit enrollment" : "";
+
+            addTest("1.4: Minimum 3-Unit Courses", all_meet_requirement, error_msg, feedback, fixes, 1);
+
+        } catch (...) {
+            addTest("1.4: Minimum 3-Unit Courses", false, "Test crashed",
+                   "Exception during 3-unit course test",
+                   "1. Check course lookup\n2. Validate counting", 1);
+        }
+
+        // Test 1.5: Maximum 1-Unit Courses
+        try {
+            bool all_meet_limit = true;
+            int violations = 0;
+
+            for (const auto& result : results) {
+                int one_unit_count = 0;
+                for (const auto& course_id : result.assigned_courses) {
+                    Course* course = getCourse(course_id);
+                    if (course && course->units == 1) {
+                        one_unit_count++;
+                    }
+                }
+
+                if (one_unit_count > 2) {
+                    violations++;
+                    all_meet_limit = false;
+                }
+            }
+
+            string error_msg = violations > 0 ? to_string(violations) + " students have too many 1-unit courses" : "";
+            string feedback = violations > 0 ?
+                "Students limited to 2 one-unit courses maximum" :
+                "All students within 1-unit course limits";
+            string fixes = violations > 0 ?
+                "1. Count 1-unit courses before enrolling\n2. Limit to 2 maximum" : "";
+
+            addTest("1.5: Maximum 1-Unit Courses", all_meet_limit, error_msg, feedback, fixes, 1);
+
+        } catch (...) {
+            addTest("1.5: Maximum 1-Unit Courses", false, "Test crashed",
+                   "Exception during 1-unit course test",
+                   "1. Check course lookup\n2. Validate counting", 1);
+        }
+    }
+
+    void printSummary() {
+        cout << "\n" << string(60, '=') << endl;
+        cout << "FINAL RESULTS SUMMARY" << endl;
+        cout << string(60, '=') << endl;
+
+        int total_points = 0, earned_points = 0;
+        int passed = 0, failed = 0;
+
+        for (const auto& test : test_results) {
+            total_points += test.points_possible;
+            earned_points += test.points_earned;
+            if (test.passed) passed++;
+            else failed++;
+        }
+
+        cout << "\nOVERALL SCORE: " << earned_points << "/" << total_points;
+        if (total_points > 0) {
+            cout << " (" << (100.0 * earned_points / total_points) << "%)";
+        }
+        cout << "\nTESTS PASSED: " << passed << "/" << (passed + failed) << endl;
+
+        cout << "\nTEST BREAKDOWN:" << endl;
+        for (const auto& test : test_results) {
+            cout << (test.passed ? "✓" : "✗") << " " << test.test_name;
+            if (test.points_possible > 0) {
+                cout << " [" << test.points_earned << "/" << test.points_possible << "]";
             }
             cout << endl;
-
-        } catch (...) {
-            cout << "Error printing results" << endl;
         }
+    }
+
+    void saveReport(const string& filename) {
+        ofstream file(filename);
+        file << "# UNIT TEST DETAILED REPORT" << endl;
+        file << "# Course Scheduler Testing Results" << endl;
+        file << endl;
+
+        int total_points = 0, earned_points = 0;
+        for (const auto& test : test_results) {
+            total_points += test.points_possible;
+            earned_points += test.points_earned;
+        }
+
+        file << "SUMMARY" << endl;
+        file << "=======" << endl;
+        file << "Score: " << earned_points << "/" << total_points << " points" << endl;
+        file << "Percentage: " << (total_points > 0 ? 100.0 * earned_points / total_points : 0) << "%" << endl;
+        file << endl;
+
+        file << "DETAILED RESULTS" << endl;
+        file << "================" << endl;
+
+        for (const auto& test : test_results) {
+            file << endl << string(40, '-') << endl;
+            file << "TEST: " << test.test_name << endl;
+            file << "RESULT: " << (test.passed ? "PASSED" : "FAILED") << endl;
+            file << "POINTS: " << test.points_earned << "/" << test.points_possible << endl;
+
+            if (!test.passed) {
+                file << endl << "ERROR: " << test.error_message << endl;
+                if (!test.detailed_feedback.empty()) {
+                    file << "ANALYSIS: " << test.detailed_feedback << endl;
+                }
+                if (!test.suggested_fixes.empty()) {
+                    file << "SUGGESTED FIXES:" << endl << test.suggested_fixes << endl;
+                }
+            }
+        }
+
+        file.close();
+        cout << "\nDetailed report saved to: " << filename << endl;
     }
 };
 
@@ -707,38 +613,33 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
-        string students_file = argv[1];
-        string courses_file = argv[2];
-        string results_file = argv[3];
+        SimpleUnitTester tester;
 
-        SafeUnitTester tester;
+        cout << "=== Simple Course Scheduler Unit Tester ===" << endl;
+        cout << "Students: " << argv[1] << endl;
+        cout << "Courses: " << argv[2] << endl;
+        cout << "Results: " << argv[3] << endl;
 
-        cout << "=== Safe Course Scheduler Unit Tester ===" << endl;
-        cout << "Students: " << students_file << endl;
-        cout << "Courses: " << courses_file << endl;
-        cout << "Results: " << results_file << endl;
-
-        if (!tester.loadInputDataSafely(students_file, courses_file)) {
-            cout << "Failed to load input data safely" << endl;
+        if (!tester.loadData(argv[1], argv[2])) {
+            cout << "Failed to load input data" << endl;
             return 1;
         }
 
-        if (!tester.loadScheduleResultsSafely(results_file)) {
-            cout << "Failed to load results safely" << endl;
+        if (!tester.loadResults(argv[3])) {
+            cout << "Failed to load results" << endl;
             return 1;
         }
 
-        tester.runSafeTests();
-        tester.printResultsSafely();
+        tester.runAllTests();
+        tester.printSummary();
 
-        cout << "\nSafe testing completed successfully!" << endl;
+        string report_file = "simple_test_report.txt";
+        tester.saveReport(report_file);
+
         return 0;
 
-    } catch (const exception& e) {
-        cout << "Top-level exception: " << e.what() << endl;
-        return 1;
     } catch (...) {
-        cout << "Unknown top-level exception" << endl;
+        cout << "Fatal error in unit tester" << endl;
         return 1;
     }
 }
